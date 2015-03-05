@@ -161,7 +161,12 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
     }
 
     protected long getCurrentDataSize(final long beginingOfData) {
-        final long currentEnd = split.getEndForOffset(currentSplitIndex);
+        long currentEnd = split.getEndForOffset(currentSplitIndex);
+
+        if(currentEnd == -1) {
+            currentEnd = reader.length();
+        }
+
         return currentEnd - beginingOfData;
     }
 
