@@ -17,6 +17,7 @@ package com.fullcontact.sstable.index;
 
 import com.fullcontact.sstable.hadoop.IndexOffsetScanner;
 import com.fullcontact.sstable.hadoop.mapreduce.HadoopSSTableConstants;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.io.Closer;
 import gnu.trove.list.array.TLongArrayList;
@@ -59,7 +60,15 @@ public class SSTableIndexIndex {
         final SSTableIndexIndex indexIndex = new SSTableIndexIndex();
         try {
             while (inputStream.available() != 0) {
-                indexIndex.add(inputStream.readLong(), inputStream.readLong());
+                final long numberOfOffsets = inputStream.readInt(); // The total number of offsets in this chunk
+                final List<Long> offsets = Lists.newArrayList();
+                for(int i = 0; i < numberOfOffsets; i++) {
+                    final long currentOffset = inputStream.readLong();
+                    offsets.add(currentOffset);
+                }
+                final long endOffset = inputStream.readLong(); // The end of the current chunk
+//                System.out.println(String.format("Read block with %s offsets, %s end offset", offsets.size(), endOffset));
+                indexIndex.add(offsets, endOffset);
             }
         } finally {
             closer.close();
@@ -71,11 +80,11 @@ public class SSTableIndexIndex {
     /**
      * Add a chunk with a start and end offset.
      *
-     * @param start Beginning of the chunk.
+     * @param offsets Offsets contained in a chunk.
      * @param end End of the chunk.
      */
-    private void add(final long start, final long end) {
-        this.chunks.add(new Chunk(start, end));
+    private void add(final List<Long> offsets, final long end) {
+        this.chunks.add(new Chunk(offsets, end));
     }
 
     /**
@@ -116,9 +125,12 @@ public class SSTableIndexIndex {
                 }
 
                 // Record the split
+                long endOffset = -1; // The end offset which is the offset to read to after the last offset in this chunk, used to calculate data size while reading data file.
                 final long[] offsets = splitOffsets.toArray();
-                os.writeLong(offsets[0]); // Start
-                os.writeLong(offsets[offsets.length - 1]); // End
+                os.writeInt(offsets.length); // The number of offsets.
+                for(int i = 0; i < offsets.length; i++) { // All the offsets in this chunk.
+                    os.writeLong(offsets[i]);
+                }
 
                 // Clear the offsets
                 splitOffsets.clear();
@@ -127,7 +139,12 @@ public class SSTableIndexIndex {
                     currentStart = index.next();
                     currentEnd = currentStart;
                     splitOffsets.add(currentStart);
+
+                    endOffset = currentStart; // Update the endOffset from above to the start of the next chunk as described above.
                 }
+
+                os.writeLong(endOffset); // We wait to write the end offset here because it needs to be the offset of the start of the next chunk.
+//                System.out.println(String.format("Wrote block with %s offsets, %s end offset", offsets.length, endOffset));
             }
 
             success = true;
@@ -147,19 +164,20 @@ public class SSTableIndexIndex {
      *
      * @return Chunks.
      */
-    public List<Chunk> getOffsets() {
+    public List<Chunk> getChunks() {
         return Lists.newArrayList(chunks);
     }
 
     /**
-     * Simple chunk which contains a start and end.
+     * Simple chunk which contains a list of offsets.
      */
     public class Chunk {
-        private final long start;
-        private final long end;
+        // TODO: Paying no attention to how big this might be for now.
+        private final List<Long> offsets;
+        private final long end; // Just a flag for the end of the data (next record) we won't read the data for this offset. -1 indicates this is the last chunk and we can read to the end of the sstable.
 
-        public Chunk(final long start, final long end) {
-            this.start = start;
+        public Chunk(final List<Long> offsets, final long end) {
+            this.offsets = offsets;
             this.end = end;
         }
 
@@ -167,16 +185,32 @@ public class SSTableIndexIndex {
             return end;
         }
 
-        public long getStart() {
-            return start;
+        public List<Long> getOffsets() {
+            return Lists.newArrayList(offsets);
         }
 
         @Override
         public String toString() {
             return "Chunk{" +
-                    "start=" + start +
+                    "offsets=" + offsets +
                     ", end=" + end +
                     '}';
+        }
+
+        public long getFirstOffset() {
+            return Iterables.getFirst(offsets, -1L).longValue();
+        }
+
+        public long getLastOffset() {
+            return Iterables.getLast(offsets, -1L).longValue();
+        }
+
+        public long[] getOffsetsArray() {
+            long[] result = new long[offsets.size()];
+            for (int i = 0; i < offsets.size(); i++) {
+                result[i] = offsets.get(i);
+            }
+            return result;
         }
     }
 }
