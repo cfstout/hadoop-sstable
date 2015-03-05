@@ -20,6 +20,7 @@ import com.fullcontact.cassandra.io.compress.CompressionMetadata;
 import com.fullcontact.cassandra.io.util.RandomAccessReader;
 import com.google.common.base.Preconditions;
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.Config;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateTableStatement;
 import org.apache.cassandra.db.ColumnFamilyType;
@@ -45,6 +46,7 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
 
     private SSTableSplit split;
     private CompressedRandomAccessReader reader;
+    private int currentSplitIndex;
 
     private K key;
     private V value;
@@ -56,6 +58,7 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
         this.split = (SSTableSplit) inputSplit;
 
         final FileSystem fileSystem = FileSystem.get(context.getConfiguration());
+        Config.setClientMode(true);
         final CompressionMetadata compressionMetadata =
                 CompressionMetadata.create(split.getPath().toString(), fileSystem);
         if (compressionMetadata == null) {
@@ -64,7 +67,8 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
 
         // open the file and seek to the start of the split
         this.reader = CompressedRandomAccessReader.open(split.getPath(), compressionMetadata, fileSystem);
-        this.reader.seek(split.getStart());
+        this.reader.seek(split.getFirstOffset());
+        this.currentSplitIndex = 0;
 
         this.cfMetaData = initializeCfMetaData(context);
     }
@@ -92,7 +96,7 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
         if (split.getSize() == 0) {
             return 0.0f;
         } else {
-            return Math.min(1.0f, (reader.getFilePointer() - split.getStart()) / (float) (split.getSize()));
+            return Math.min(1.0f, (reader.getFilePointer() - split.getFirstOffset()) / (float) (split.getSize()));
         }
     }
 
@@ -112,7 +116,7 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
     }
 
     protected boolean hasMore() {
-        return reader.getFilePointer() <= split.getEnd();
+        return reader.getFilePointer() <= split.getLastOffset();
     }
 
     private static CFMetaData initializeCfMetaData(TaskAttemptContext context) {
@@ -131,6 +135,8 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
             // Cannot proceed if an error occurs
             throw new RuntimeException("Error configuring SSTable reader. Cannot proceed", e);
         }
+
+        cfMetaData.rebuild();
 
         return cfMetaData;
     }
@@ -152,5 +158,14 @@ public abstract class SSTableRecordReader<K, V> extends RecordReader<K, V> {
 
     protected CFMetaData getCfMetaData() {
         return this.cfMetaData;
+    }
+
+    protected long getCurrentDataSize(final long beginingOfData) {
+        final long currentEnd = split.getEndForOffset(currentSplitIndex);
+        return currentEnd - beginingOfData;
+    }
+
+    protected void incrementCurrentState() {
+        currentSplitIndex++;
     }
 }

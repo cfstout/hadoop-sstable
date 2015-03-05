@@ -33,9 +33,9 @@ import java.util.Arrays;
  */
 public class SSTableSplit extends InputSplit implements Writable {
 
-    private long start;
-    private long end;
+    private long[] offsets = new long[0];
     private long length;
+    private long endOffset;
     private Path file;
     private String[] hosts;
 
@@ -48,31 +48,27 @@ public class SSTableSplit extends InputSplit implements Writable {
      * @param file  the file name
      * @param hosts the list of hosts containing the block, possibly null
      */
-    public SSTableSplit(Path file, long[] offsets, long length, String[] hosts) {
-        this(file, offsets[0], offsets[offsets.length - 1], length, hosts);
-    }
-
-    public SSTableSplit(Path file, long start, long end, long length, String[] hosts) {
+    public SSTableSplit(final Path file, final long[] offsets, final long endOffset, final long length, final String[] hosts) {
         this.file = file;
+        this.offsets = offsets;
+        this.endOffset = endOffset;
         this.length = length;
-        this.start = start;
-        this.end = end;
         this.hosts = hosts;
     }
 
     @Override
     public String toString() {
         return "SSTableSplit{" +
-                "start=" + start +
-                ", end=" + end +
-                ", file=" + file +
+                "offsets=" + Arrays.toString(offsets) +
                 ", length=" + length +
+                ", end=" + endOffset +
+                ", file=" + file +
                 ", hosts=" + Arrays.toString(hosts) +
                 '}';
     }
 
     public long getOffsetCount() {
-        return end - start;
+        return offsets.length;
     }
 
     @Override
@@ -84,16 +80,23 @@ public class SSTableSplit extends InputSplit implements Writable {
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, file.toString());
         out.writeLong(length);
-        out.writeLong(start);
-        out.writeLong(end);
+        out.writeInt(offsets.length);
+        for (int i = 0; i < offsets.length; i++) {
+            out.writeLong(offsets[i]);
+        }
+        out.writeLong(endOffset);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
         file = new Path(Text.readString(in));
         length = in.readLong();
-        start = in.readLong();
-        end = in.readLong();
+        final int numberOffsets = in.readInt();
+        offsets = new long[numberOffsets];
+        for (int i = 0; i < numberOffsets; i++) {
+            offsets[i] = in.readLong();
+        }
+        endOffset = in.readLong();
         hosts = null;
     }
 
@@ -110,15 +113,39 @@ public class SSTableSplit extends InputSplit implements Writable {
         return file;
     }
 
-    public long getStart() {
-        return start;
-    }
-
-    public long getEnd() {
-        return end;
+    public long getEndOffset() {
+        return endOffset;
     }
 
     public int getSize() {
-        return (int) (end - start);
+        return (int) (offsets[offsets.length - 1] - offsets[0]);
+    }
+
+    public long[] getOffsets() {
+        return offsets;
+    }
+
+    public long getFirstOffset() {
+        return offsets[0];
+    }
+
+    public long getLastOffset() {
+        return offsets[offsets.length - 1];
+    }
+
+    public long getOffset(final int index) {
+        return this.offsets[index];
+    }
+
+    public long getEndForOffset(final int index) {
+        final int endIndex = index + 1;
+        if(endIndex > offsets.length) {
+            throw new IllegalArgumentException("End index cannot be larger than the total number of offsets");
+        }
+        if(endIndex < offsets.length) {
+            return this.offsets[index];
+        } else {
+            return this.endOffset;
+        }
     }
 }

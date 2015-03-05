@@ -27,6 +27,9 @@ public class CQLUtil {
                 new CFMetaData("assess", "kvs_strict", ColumnFamilyType.Standard, statement.comparator, null);
 
         statement.applyPropertiesTo(cfm);
+
+        cfm.rebuild();
+
         return cfm;
     }
 

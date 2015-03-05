@@ -151,11 +151,14 @@ public abstract class SSTableInputFormat<K, V> extends FileInputFormat<K, V> {
                 throw new IOException("Index not found for " + dataFile);
             }
 
-            for (final SSTableIndexIndex.Chunk chunk : index.getOffsets()) {
+            for (final SSTableIndexIndex.Chunk chunk : index.getChunks()) {
                 // This isn't likely to work well because we are dealing with the index into uncompressed data...
-                final int blockIndex = getBlockIndex(blockLocations, chunk.getStart() / COMPRESSION_RATIO_ASSUMPTION);
-                final SSTableSplit split = new SSTableSplit(dataFile, chunk.getStart(), chunk.getEnd(),
-                        chunk.getEnd() - chunk.getStart(), blockLocations[blockIndex].getHosts());
+                final int blockIndex = getBlockIndex(blockLocations, chunk.getFirstOffset() / COMPRESSION_RATIO_ASSUMPTION);
+                final SSTableSplit split = new SSTableSplit(dataFile,
+                        chunk.getOffsetsArray(),
+                        chunk.getEnd(),
+                        chunk.getLastOffset() - chunk.getFirstOffset(),
+                        blockLocations[blockIndex].getHosts());
                 result.add(split);
             }
         }
