@@ -31,7 +31,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 
 public class SSTableIndexIndexerTest {
-    private static final String INDEX_FILE = "/data/cassandra-2.0/searchtarget-results-jb-36177-Index.db";
+    private static final String INDEX_FILE = "/data/Keyspace1-Standard1-ic-0-Index.db";
     private LocalFileSystem fileSystem;
 
     @Before
@@ -67,6 +67,6 @@ public class SSTableIndexIndexerTest {
         SSTableIndexIndex index =
                 SSTableIndexIndex.readIndex(fileSystem, new Path(tmpDir.getAbsolutePath(), sampleFile.getName()));
         assertNotNull(index);
-        assertEquals(100, index.getChunks().size());
+        assertEquals(1, index.getChunks().size());
     }
 }
