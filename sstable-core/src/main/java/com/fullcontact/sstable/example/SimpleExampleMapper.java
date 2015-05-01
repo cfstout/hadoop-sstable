@@ -49,7 +49,7 @@ public class SimpleExampleMapper extends Mapper<ByteBuffer, SSTableIdentityItera
     protected void map(ByteBuffer key, SSTableIdentityIterator value, Context context)
             throws IOException, InterruptedException {
         final ByteBuffer newBuffer = key.slice();
-        final Text mapKey = new Text(keyType.getString(newBuffer));
+        final Text mapKey = new Text(keyType.getString(newBuffer) + "\n");
 
         Text mapValue = jsonColumnParser.getJson(value, context);
         if (mapValue == null) {

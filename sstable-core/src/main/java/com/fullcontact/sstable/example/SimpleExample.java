@@ -80,9 +80,10 @@ public class SimpleExample extends Configured implements Tool {
 
         job.setInputFormatClass(SSTableRowInputFormat.class);
         job.setOutputFormatClass(SequenceFileOutputFormat.class);
-        SequenceFileOutputFormat.setCompressOutput(job, true);
-        SequenceFileOutputFormat.setOutputCompressorClass(job, GzipCodec.class);
-        SequenceFileOutputFormat.setOutputCompressionType(job, SequenceFile.CompressionType.BLOCK);
+        job.getConfiguration().set("hadoop.sstable.cql", "CREATE TABLE profiles.profile_interests (bvid text, time timestamp, interests list<text>, brands list<text>, edrclient boolean, PRIMARY KEY (bvid, time) );");
+//        SequenceFileOutputFormat.setCompressOutput(job, true);
+//        SequenceFileOutputFormat.setOutputCompressorClass(job, GzipCodec.class);
+//        SequenceFileOutputFormat.setOutputCompressionType(job, SequenceFile.CompressionType.BLOCK);
 
         String inputPaths = cli.getArgs()[0];
         LOG.info("Setting initial input paths to {}", inputPaths);

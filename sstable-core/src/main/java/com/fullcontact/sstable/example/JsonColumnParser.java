@@ -6,7 +6,9 @@ import org.apache.cassandra.cql3.CFDefinition;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BooleanType;
 import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.json.simple.JSONObject;
@@ -29,14 +31,14 @@ public class JsonColumnParser {
 
     protected Text getJson(SSTableIdentityIterator rowIterator, Mapper.Context context) {
         final StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        insertKey(sb, rowIterator.getKey().toString());
+//        sb.append("{");
+//        insertKey(sb, getColumnName(rowIterator.getKey().key, UTF8Type.instance));
         sb.append("{");
         insertKey(sb, "columns");
         sb.append("[");
         serializeColumns(sb, rowIterator, context);
         sb.append("]");
-        sb.append("}}");
+        sb.append("}\n");
         return new Text(sb.toString());
     }
 
@@ -57,6 +59,13 @@ public class JsonColumnParser {
         if (name == null) {
             return defaultType;
         }
+        if (colId.toString().equals("brands")) {
+            return UTF8Type.instance;
+        } else if (colId.toString().equals("interests")) {
+            return UTF8Type.instance;
+        } else if (colId.toString().equals("edrclient")) {
+            return BooleanType.instance;
+        }
 
         final AbstractType<?> type = name.type;
         return type != null ? type : defaultType;
@@ -67,12 +76,21 @@ public class JsonColumnParser {
      * <p/>
      * i.e. key_1:key_2:key_3:column_name
      *
+     * for us it's timestamp_with_colon:column_name:bvid
+     *
      * @param columnName
      * @return
      */
     private String handleCompositeColumnName(final String columnName) {
-        final String columnKey = columnName.substring(columnName.lastIndexOf(":") + 1);
-        return columnKey.equals("") ? columnName : columnKey;
+        if (columnName.contains(":")) {
+            String columnKey = columnName.substring(columnName.indexOf(":") + 1);
+            if (columnKey.contains(":") && columnKey.indexOf(":") != columnKey.lastIndexOf(":")) {
+                final String ck = columnKey.substring(columnKey.indexOf(":") + 1, columnKey.lastIndexOf(":"));
+                return ck.equals("") ? columnName : ck;
+            }
+        }
+        return columnName;
+
     }
 
     private void serializeColumns(StringBuilder sb, SSTableIdentityIterator rowIterator, Mapper.Context context) {
@@ -80,13 +98,13 @@ public class JsonColumnParser {
             OnDiskAtom atom = rowIterator.next();
             if (atom instanceof Column) {
                 Column column = (Column) atom;
-                String cn = getColumnName(column.name(), columnNameConverter);
+                String cn = handleCompositeColumnName(getColumnName(column.name(), columnNameConverter));
                 sb.append("[\"");
                 sb.append(cn);
                 sb.append("\", \"");
                 sb.append(JSONObject.escape(getColumnValueConvertor(handleCompositeColumnName(cn), BytesType.instance).getString(column.value())));
-                sb.append("\", ");
-                sb.append(column.timestamp());
+                sb.append("\"");
+//                sb.append(column.timestamp());
 
                 if (column instanceof DeletedColumn) {
                     sb.append(", ");
